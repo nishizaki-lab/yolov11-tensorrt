@@ -18,9 +18,7 @@ This repository hosts a C++ implementation of the state-of-the-art YOLOv11 objec
 
 ## Installation
 
-### 1. Clone the Repository
-
-```bash
+### 1. Clone the Repository```bash
 git clone https://github.com/spacewalk01/yolov11-tensorrt.git
 cd yolov11-tensorrt
 ```
@@ -63,7 +61,7 @@ cmake --build . --config Release
 Convert the ONNX model to a TensorRT engine:
 
 ```bash
-./yolov11-tensorrt.exe yolo11s.onnx ""
+./yolov11-tensorrt.exe yolo11s.onnx 0
 ```
 
 #### 2. Run Inference on an Image
@@ -82,6 +80,22 @@ Perform object detection on a video:
 ./yolov11-tensorrt.exe yolo11s.engine "road.mp4"
 ```
 
+#### 4. Run Inference on a Video
+
+Perform object detection on a camera:
+
+```bash
+./yolov11-tensorrt.exe yolo11s.engine 0
+```
+
 ## License
 
 This project is licensed under the AGPL-3.0 License. See the [LICENSE](LICENSE) file for details.
+
+## Attribution
+
+This code is a modified version from [https://github.com/spacewalk01/yolov11-tensorrt](https://github.com/spacewalk01/yolov11-tensorrt).
+
+
+
+
