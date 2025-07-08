@@ -1,0 +1,7 @@
+# Build directories
+build/
+
+# Model files
+*.engine
+*.pt
+*.onnx

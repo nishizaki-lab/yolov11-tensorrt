@@ -14,20 +14,21 @@ include_directories(src/)
 # Add source files
 set(SOURCES
     main.cpp
-    src/yolov11.cpp
+    src/YOLOv11.cpp
 )
 
 # Add CUDA source files
-set(CUDA_SOURCES src/preprocess.cu)
+set(CUDA_SOURCES src/preprocess.cu src/gpu_nms.cu)
 
 # Add headers
 set(HEADERS
-    src/yolov11.h
+    src/YOLOv11.h
     src/macros.h
     src/logging.h
     src/cuda_utils.h
     src/preprocess.h
     src/common.h
+    src/gpu_nms.h
 )
 
 # Find and include OpenCV
@@ -43,7 +44,7 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 # Include TensorRT
 include_directories(${TENSORRT_DIR}/include)
 link_directories(${TENSORRT_DIR}/lib)
-set(TENSORRT_LIBS nvinfer nvinfer_plugin nvparsers nvonnxparser)
+set(TENSORRT_LIBS nvinfer nvinfer_plugin nvonnxparser)
 
 # Create an executable
 cuda_add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${CUDA_SOURCES})

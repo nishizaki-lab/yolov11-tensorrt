@@ -2,6 +2,7 @@
 
 #include "NvInfer.h"
 #include <opencv2/opencv.hpp>
+#include "gpu_nms.h"
 
 using namespace nvinfer1;
 using namespace std;
@@ -52,4 +53,11 @@ private:
 
     void build(std::string onnxPath, nvinfer1::ILogger& logger);
     bool saveEngine(const std::string& filename);
+    
+    // Optimized NMS functions
+    vector<int> fastNMS(const vector<Rect>& boxes, const vector<float>& confidences, float nms_threshold);
+    float calculateIoU(const Rect& box1, const Rect& box2);
+    
+    // GPU NMS
+    GPUNMS gpu_nms_;
 };
