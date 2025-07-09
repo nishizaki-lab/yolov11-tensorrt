@@ -7,6 +7,7 @@
 #include "common.h"
 #include <fstream>
 #include <iostream>
+#include <cmath>
 
 
 static Logger logger;
@@ -175,6 +176,10 @@ void YOLOv11::postprocess(vector<Detection>& output)
             boxes.push_back(box);
             class_ids.push_back(class_id_point.y);
             confidences.push_back(score);
+            
+            // Debug: Print detection info
+            printf("Detection %d: class=%s, conf=%.3f, box=[%d,%d,%d,%d]\n", 
+                   (int)boxes.size()-1, CLASS_NAMES[class_id_point.y].c_str(), score, box.x, box.y, box.width, box.height);
         }
     }
     auto end_parse = std::chrono::high_resolution_clock::now();
@@ -194,9 +199,35 @@ void YOLOv11::postprocess(vector<Detection>& output)
         result.conf = confidences[idx];
         result.bbox = boxes[idx];
         output.push_back(result);
+        
+        // Debug: Print final detection info
+        printf("Final Detection %d: class=%s, conf=%.3f, box=[%d,%d,%d,%d]\n", 
+               i, CLASS_NAMES[result.class_id].c_str(), result.conf, result.bbox.x, result.bbox.y, result.bbox.width, result.bbox.height);
     }
     auto end_finalize = std::chrono::high_resolution_clock::now();
     auto finalize_time = std::chrono::duration_cast<std::chrono::microseconds>(end_finalize - start_finalize).count();
+    
+    // COMMENTED OUT: Apply clustering to merge nearby detections
+    // auto start_cluster = std::chrono::high_resolution_clock::now();
+    // output = clusterDetections(output, 50.0f);  // Cluster detections within 50 pixels
+    // auto end_cluster = std::chrono::high_resolution_clock::now();
+    // auto cluster_time = std::chrono::duration_cast<std::chrono::microseconds>(end_cluster - start_cluster).count();
+    
+    // COMMENTED OUT: Print final clustered detections
+    // printf("=== CLUSTERED RESULTS ===\n");
+    // for (int i = 0; i < output.size(); i++) {
+    //     printf("Cluster %d: class=%s, conf=%.3f, box=[%d,%d,%d,%d]\n", 
+    //            i, CLASS_NAMES[output[i].class_id].c_str(), output[i].conf, 
+    //            output[i].bbox.x, output[i].bbox.y, output[i].bbox.width, output[i].bbox.height);
+    // }
+    
+    // Print final NMS results (without clustering)
+    printf("=== FINAL NMS RESULTS ===\n");
+    for (int i = 0; i < output.size(); i++) {
+        printf("Result %d: class=%s, conf=%.3f, box=[%d,%d,%d,%d]\n", 
+               i, CLASS_NAMES[output[i].class_id].c_str(), output[i].conf, 
+               output[i].bbox.x, output[i].bbox.y, output[i].bbox.width, output[i].bbox.height);
+    }
     
     auto end_total = std::chrono::high_resolution_clock::now();
     auto total_time = std::chrono::duration_cast<std::chrono::microseconds>(end_total - start_total).count();
@@ -206,6 +237,7 @@ void YOLOv11::postprocess(vector<Detection>& output)
     std::cout << "  Parse: " << parse_time << " μs (" << (parse_time * 100.0 / total_time) << "%)" << std::endl;
     std::cout << "  NMS: " << nms_time << " μs (" << (nms_time * 100.0 / total_time) << "%)" << std::endl;
     std::cout << "  Finalize: " << finalize_time << " μs (" << (finalize_time * 100.0 / total_time) << "%)" << std::endl;
+    // std::cout << "  Clustering: " << cluster_time << " μs (" << (cluster_time * 100.0 / total_time) << "%)" << std::endl;
     std::cout << "  Total: " << total_time << " μs" << std::endl;
 }
 
@@ -266,6 +298,47 @@ float YOLOv11::calculateIoU(const Rect& box1, const Rect& box2)
     int union_area = area1 + area2 - intersection;
     
     return static_cast<float>(intersection) / static_cast<float>(union_area);
+}
+
+vector<Detection> YOLOv11::clusterDetections(const vector<Detection>& detections, float cluster_threshold) {
+    if (detections.empty()) return detections;
+    
+    vector<Detection> clustered_detections;
+    vector<bool> used(detections.size(), false);
+    
+    for (int i = 0; i < detections.size(); i++) {
+        if (used[i]) continue;
+        
+        Detection best_detection = detections[i];
+        used[i] = true;
+        
+        // Find all detections near this one
+        for (int j = i + 1; j < detections.size(); j++) {
+            if (used[j]) continue;
+            
+            // Calculate center distance
+            float center1_x = detections[i].bbox.x + detections[i].bbox.width / 2.0f;
+            float center1_y = detections[i].bbox.y + detections[i].bbox.height / 2.0f;
+            float center2_x = detections[j].bbox.x + detections[j].bbox.width / 2.0f;
+            float center2_y = detections[j].bbox.y + detections[j].bbox.height / 2.0f;
+            
+            float distance = sqrt((center1_x - center2_x) * (center1_x - center2_x) + 
+                                (center1_y - center2_y) * (center1_y - center2_y));
+            
+            if (distance < cluster_threshold) {
+                // Keep the detection with higher confidence
+                if (detections[j].conf > best_detection.conf) {
+                    best_detection = detections[j];
+                }
+                used[j] = true;
+            }
+        }
+        
+        clustered_detections.push_back(best_detection);
+    }
+    
+    printf("Clustering: Reduced %d detections to %d clusters\n", (int)detections.size(), (int)clustered_detections.size());
+    return clustered_detections;
 }
 
 void YOLOv11::build(std::string onnxPath, nvinfer1::ILogger& logger)
