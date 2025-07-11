@@ -6,7 +6,7 @@ def main():
     parser.add_argument('--model_path', type=str, 
                        default="bunch_model.pt",
                        help='Path to the YOLO model file')
-    parser.add_argument('--imgsz', type=int, default=320,
+    parser.add_argument('--imgsz', type=int, default=640,
                        help='Image size for export (default: 640)')
     
     args = parser.parse_args()

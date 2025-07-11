@@ -5,9 +5,10 @@
 #include <chrono> // Added for timing measurements
 
 #define MAX_DETECTIONS 4096
-#define N_PARTITIONS 32
 
 // CUDA kernel for generating NMS bitmap
+// For each pair (i,j): nmsbitmap[i][j] = 1 if box i should be kept when compared to box j
+// Logic: box i is suppressed by box j only if confidence[i] < confidence[j] AND IoU(i,j) >= threshold
 __global__ void generate_nms_bitmap(float* boxes, float* confidences, uint8_t* nmsbitmap, 
                                    int num_boxes, float nms_threshold) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -16,7 +17,7 @@ __global__ void generate_nms_bitmap(float* boxes, float* confidences, uint8_t* n
     if (i >= num_boxes || j >= num_boxes) return;
     
     if (confidences[i] < confidences[j]) {
-        // Calculate IoU
+        // Calculate IoU between box i and box j
         float x1_i = boxes[i * 4];
         float y1_i = boxes[i * 4 + 1];
         float x2_i = boxes[i * 4] + boxes[i * 4 + 2];
@@ -37,8 +38,11 @@ __global__ void generate_nms_bitmap(float* boxes, float* confidences, uint8_t* n
             intersection_area = (intersection_x2 - intersection_x1) * (intersection_y2 - intersection_y1);
         }
         
+        // FIXED: Proper IoU calculation using union area
+        float area_i = boxes[i * 4 + 2] * boxes[i * 4 + 3];
         float area_j = boxes[j * 4 + 2] * boxes[j * 4 + 3];
-        float iou = (area_j > 0.0f) ? intersection_area / area_j : 0.0f;
+        float union_area = area_i + area_j - intersection_area;
+        float iou = (union_area > 0.0f) ? intersection_area / union_area : 0.0f;
         
         nmsbitmap[i * MAX_DETECTIONS + j] = (iou < nms_threshold) ? 1 : 0;
     } else {
@@ -47,18 +51,23 @@ __global__ void generate_nms_bitmap(float* boxes, float* confidences, uint8_t* n
 }
 
 // CUDA kernel for reducing NMS bitmap
+// For each box, check if it should be kept against ALL other boxes
 __global__ void reduce_nms_bitmap(uint8_t* nmsbitmap, uint8_t* pointsbitmap, int num_boxes) {
-    int idx = blockIdx.x * MAX_DETECTIONS + threadIdx.x;
+    int box_idx = blockIdx.x;
     
-    if (threadIdx.x < num_boxes) {
-        uint8_t result = nmsbitmap[idx];
-        
-        for (int i = 1; i < N_PARTITIONS && (idx + i * MAX_DETECTIONS / N_PARTITIONS) < MAX_DETECTIONS; i++) {
-            result = result && nmsbitmap[idx + i * MAX_DETECTIONS / N_PARTITIONS];
+    if (box_idx >= num_boxes) return;
+    
+    // For box_idx, check if it should be kept against ALL other boxes
+    uint8_t keep_box = 1;
+    
+    for (int j = 0; j < num_boxes; j++) {
+        if (nmsbitmap[box_idx * MAX_DETECTIONS + j] == 0) {
+            keep_box = 0;
+            break;
         }
-        
-        pointsbitmap[blockIdx.x] = result;
     }
+    
+    pointsbitmap[box_idx] = keep_box;
 }
 
 GPUNMS::GPUNMS() : initialized_(false), max_detections_(MAX_DETECTIONS),
@@ -217,12 +226,8 @@ std::vector<int> GPUNMS::runNMS(const std::vector<cv::Rect>& boxes,
         return std::vector<int>();
     }
     
-    // Launch reduce kernel
-    dim3 reduce_block_dim(MAX_DETECTIONS / N_PARTITIONS);
-    dim3 reduce_grid_dim(num_boxes);
-    
-    reduce_nms_bitmap<<<reduce_grid_dim, reduce_block_dim>>>(gpu_nms_bitmap_, 
-                                                            gpu_points_bitmap_, num_boxes);
+    // Launch reduction kernel
+    reduce_nms_bitmap<<<num_boxes, 1>>>(gpu_nms_bitmap_, gpu_points_bitmap_, num_boxes);
     
     err = cudaGetLastError();
     if (err != cudaSuccess) {

@@ -46,8 +46,8 @@ private:
     int detection_attribute_size;
     int num_classes = 80;
     const int MAX_IMAGE_SIZE = 4096 * 4096;
-    float conf_threshold = 0.3f;
-    float nms_threshold = 0.4f;
+    float conf_threshold = 0.5f;  // Increased from 0.3f - more selective
+    float nms_threshold = 0.1f;   // Decreased from 0.3f - very aggressive suppression
 
     vector<Scalar> colors;
 
@@ -57,6 +57,9 @@ private:
     // Optimized NMS functions
     vector<int> fastNMS(const vector<Rect>& boxes, const vector<float>& confidences, float nms_threshold);
     float calculateIoU(const Rect& box1, const Rect& box2);
+    
+    // Clustering function to merge nearby detections
+    vector<Detection> clusterDetections(const vector<Detection>& detections, float cluster_threshold = 50.0f);
     
     // GPU NMS
     GPUNMS gpu_nms_;

@@ -7,6 +7,9 @@ find_package(CUDA REQUIRED)
 set(CMAKE_CXX_STANDARD 17)
 add_definitions(-DAPI_EXPORTS)
 
+# Suppress OpenCV virtual function override warnings in CUDA compilation
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -diag-suppress 611)
+
 # Include CUDA directories
 include_directories(${CUDA_INCLUDE_DIRS})
 include_directories(src/)
